@@ -7,21 +7,28 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
 app.use(express.json());
+app.use(cors({
+  origin: "http://localhost:5173",   // specific origin likho
+  credentials: true,                 // cookies/tokens allow karega
+}));
 
 const authRoutes = require('./routes/authRoutes');
 const itemRoutes = require('./routes/itemRoutes');
+const searchRoutes = require('./routes/searchRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/items', itemRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/uploads', express.static('uploads'));
 
 app.get('/', (req, res) => {
 	return res.json({
 		message: 'Brain-Box API is running',
 		health: '/health',
 		auth: ['/api/auth/signup', '/api/auth/login'],
-		items: ['/api/items (GET, POST)', '/api/items/:id (GET, PUT, DELETE)']
+		items: ['/api/items (GET, POST)', '/api/items/:id (GET, PUT, DELETE)'],
+		search: ['/api/search (POST) - Semantic search with embeddings']
 	});
 });
 
