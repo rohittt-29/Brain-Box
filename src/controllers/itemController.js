@@ -1,5 +1,6 @@
 const Item = require('../models/Item');
 const { generateEmbedding } = require('../utils/embedding');
+const { uploadBuffer } = require('../utils/cloudinary');
 
 exports.createItem = async (req, res, next) => {
   try {
@@ -9,9 +10,15 @@ exports.createItem = async (req, res, next) => {
     const payload = {
       ...req.body,
       userId: req.user.id,
-      fileUrl: req.file ? `/uploads/${req.file.filename}` : null
+      fileUrl: null
     };
     
+    // If a file is present, upload to Cloudinary
+    if (req.file && req.file.buffer) {
+      const result = await uploadBuffer(req.file.buffer, { folder: 'brain-box' })
+      payload.fileUrl = result.secure_url
+    }
+
     console.log('Final payload:', payload);
 
     // Build semantic text from content, title, url and tags so tags influence search
