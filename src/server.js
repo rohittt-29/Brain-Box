@@ -16,15 +16,18 @@ const defaultOrigins = [
 const rawCorsOrigin = process.env.CORS_ORIGIN || defaultOrigins.join(",");
 const allowedOrigins = rawCorsOrigin.split(',').map(o => o.trim()).filter(Boolean);
 
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
-    // Allow non-browser requests or same-origin
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error(`CORS blocked: ${origin} not allowed`));
   },
   credentials: true,
-}));
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 const authRoutes = require('./routes/authRoutes');
 const itemRoutes = require('./routes/itemRoutes');
