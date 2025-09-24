@@ -13,31 +13,10 @@ exports.createItem = async (req, res, next) => {
       fileUrl: null
     };
     
-    // Normalize tags if sent via multipart/form-data as string
-    if (typeof payload.tags === 'string') {
-      try {
-        const parsed = JSON.parse(payload.tags);
-        payload.tags = Array.isArray(parsed) ? parsed : String(payload.tags).split(',').map((t) => t.trim()).filter(Boolean);
-      } catch (_) {
-        payload.tags = String(payload.tags).split(',').map((t) => t.trim()).filter(Boolean);
-      }
-    }
-
-    // If a file is present, try to upload to Cloudinary, but do not fail the whole request on error
+    // If a file is present, upload to Cloudinary
     if (req.file && req.file.buffer) {
-      const hasCloudinaryConfig = !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
-      if (hasCloudinaryConfig) {
-        try {
-          const result = await uploadBuffer(req.file.buffer, { folder: 'brain-box' });
-          payload.fileUrl = result.secure_url;
-        } catch (uploadErr) {
-          console.error('Cloudinary upload failed, proceeding without fileUrl:', uploadErr?.message || uploadErr);
-          payload.fileUrl = null;
-        }
-      } else {
-        console.warn('Cloudinary env not configured; skipping upload and proceeding without fileUrl');
-        payload.fileUrl = null;
-      }
+      const result = await uploadBuffer(req.file.buffer, { folder: 'brain-box' })
+      payload.fileUrl = result.secure_url
     }
 
     console.log('Final payload:', payload);
