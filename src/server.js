@@ -8,9 +8,22 @@ dotenv.config();
 const app = express();
 
 app.use(express.json());
+// Allow single or multiple comma-separated origins via CORS_ORIGIN
+const defaultOrigins = [
+  "http://localhost:5173",
+  "https://brain-ui-beta.vercel.app",
+];
+const rawCorsOrigin = process.env.CORS_ORIGIN || defaultOrigins.join(",");
+const allowedOrigins = rawCorsOrigin.split(',').map(o => o.trim()).filter(Boolean);
+
 app.use(cors({
-  origin: "http://localhost:5173",   // specific origin likho
-  credentials: true,                 // cookies/tokens allow karega
+  origin: (origin, callback) => {
+    // Allow non-browser requests or same-origin
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked: ${origin} not allowed`));
+  },
+  credentials: true,
 }));
 
 const authRoutes = require('./routes/authRoutes');
