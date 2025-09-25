@@ -15,7 +15,10 @@ exports.createItem = async (req, res, next) => {
     
     // If a file is present, upload to Cloudinary
     if (req.file && req.file.buffer) {
-      const result = await uploadBuffer(req.file.buffer, { folder: 'brain-box' })
+      const result = await uploadBuffer(req.file.buffer, {
+        folder: 'brain-box',
+        originalFilename: req.file.originalname
+      })
       payload.fileUrl = result.secure_url
     }
 

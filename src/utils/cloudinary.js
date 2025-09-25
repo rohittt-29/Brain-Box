@@ -9,14 +9,30 @@ cloudinary.config({
 
 /**
  * Upload a file buffer to Cloudinary
+ * Ensures PDFs and other documents are uploaded as raw assets so they are served with the correct MIME type.
  * @param {Buffer} buffer
  * @param {Object} options
- * @returns {Promise<{ secure_url: string, public_id: string }>} 
+ * @param {string} [options.folder]
+ * @param {string} [options.originalFilename]
+ * @returns {Promise<{ secure_url: string, public_id: string }>}
  */
 function uploadBuffer(buffer, options = {}) {
   return new Promise((resolve, reject) => {
+    const uploadOptions = {
+      folder: options.folder || 'brain-box',
+      // Upload as raw so PDFs keep application/pdf and render inline in browser
+      resource_type: 'raw',
+      // Try to preserve the original filename and extension for correct content-type
+      use_filename: true,
+      unique_filename: true,
+    };
+
+    if (options.originalFilename) {
+      uploadOptions.filename_override = options.originalFilename;
+    }
+
     const stream = cloudinary.uploader.upload_stream(
-      { folder: options.folder || 'brain-box', resource_type: 'auto' },
+      uploadOptions,
       (error, result) => {
         if (error) return reject(error);
         resolve(result);
