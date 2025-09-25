@@ -11,7 +11,7 @@ app.use(express.json());
 // Allow single or multiple comma-separated origins via CORS_ORIGIN
 // In production, default to your Vercel domain only; in dev allow localhost
 const defaultOrigins = (process.env.NODE_ENV === 'production')
-  ? ["https://brain-ui-beta.vercel.app"]
+  ? ["https://brain-box1.vercel.app"]
   : ["http://localhost:5173"];
 const rawCorsOrigin = process.env.CORS_ORIGIN || defaultOrigins.join(",");
 const allowedOrigins = rawCorsOrigin.split(',').map(o => o.trim()).filter(Boolean);
