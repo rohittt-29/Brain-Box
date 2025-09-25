@@ -30,8 +30,8 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-// Ensure preflight requests are handled for all routes
-app.options('*', cors(corsOptions));
+// Ensure preflight requests are handled for API routes (avoid '*' which breaks on Express 5)
+app.options('/api/*', cors(corsOptions));
 
 const authRoutes = require('./routes/authRoutes');
 const itemRoutes = require('./routes/itemRoutes');
