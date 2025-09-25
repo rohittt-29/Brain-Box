@@ -20,11 +20,10 @@ function uploadBuffer(buffer, options = {}) {
   return new Promise((resolve, reject) => {
     const uploadOptions = {
       folder: options.folder || 'brain-box',
-      // Upload as raw so PDFs keep application/pdf and render inline in browser
-      resource_type: 'raw',
-      // Try to preserve the original filename and extension for correct content-type
+      resource_type: 'raw',     // PDFs, docs etc.
       use_filename: true,
       unique_filename: true,
+      access_mode: 'public',    // 👈 yeh add kiya
     };
 
     if (options.originalFilename) {
@@ -43,5 +42,3 @@ function uploadBuffer(buffer, options = {}) {
 }
 
 module.exports = { cloudinary, uploadBuffer };
-
-
