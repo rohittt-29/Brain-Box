@@ -17,12 +17,14 @@ const defaultOrigins = (process.env.NODE_ENV === 'production')
   ]
   : ["http://localhost:5173"];
 const rawCorsOrigin = process.env.CORS_ORIGIN || defaultOrigins.join(",");
-const allowedOrigins = rawCorsOrigin.split(',').map(o => o.trim()).filter(Boolean);
+const normalizeOrigin = (o) => String(o || '').trim().toLowerCase().replace(/\/$/, '');
+const allowedOrigins = rawCorsOrigin.split(',').map(o => normalizeOrigin(o)).filter(Boolean);
 
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    const incoming = normalizeOrigin(origin);
+    if (allowedOrigins.includes(incoming)) return callback(null, true);
     return callback(new Error(`CORS blocked: ${origin} not allowed`));
   },
   credentials: true,
@@ -37,7 +39,8 @@ app.use(cors(corsOptions));
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     const origin = req.headers.origin;
-    if (!origin || allowedOrigins.includes(origin)) {
+    const incoming = normalizeOrigin(origin);
+    if (!origin || allowedOrigins.includes(incoming)) {
       if (origin) {
         res.header('Access-Control-Allow-Origin', origin);
         res.header('Vary', 'Origin');
