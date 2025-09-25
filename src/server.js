@@ -16,9 +16,13 @@ const defaultOrigins = (process.env.NODE_ENV === 'production')
     "https://brain-ui-beta.vercel.app"
   ]
   : ["http://localhost:5173"];
-const rawCorsOrigin = process.env.CORS_ORIGIN || defaultOrigins.join(",");
 const normalizeOrigin = (o) => String(o || '').trim().toLowerCase().replace(/\/$/, '');
-const allowedOrigins = rawCorsOrigin.split(',').map(o => normalizeOrigin(o)).filter(Boolean);
+const envOriginsRaw = process.env.CORS_ORIGIN || '';
+const envOrigins = envOriginsRaw.split(',').map(o => normalizeOrigin(o)).filter(Boolean);
+const defaultAllowed = (defaultOrigins || []).map(o => normalizeOrigin(o)).filter(Boolean);
+// Merge defaults with any provided via env
+const allowedOrigins = Array.from(new Set([...defaultAllowed, ...envOrigins]));
+console.log('CORS allowed origins:', allowedOrigins);
 
 const corsOptions = {
   origin: (origin, callback) => {
