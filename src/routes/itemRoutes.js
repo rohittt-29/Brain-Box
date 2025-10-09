@@ -19,7 +19,8 @@ router.post('/', upload.single('pdf'), createItem);
 
 router.get('/', getItems);
 router.get('/:id', getItemById);
-router.put('/:id', updateItem);
+// Accept multipart form-data on update to allow both field edits and optional file replacement
+router.put('/:id', upload.single('pdf'), updateItem);
 router.delete('/:id', deleteItem);
 
 

@@ -13,6 +13,9 @@ const itemSchema = new mongoose.Schema(
   type: String,
   required: false
 },
+    // Categorization fields for dashboard grouping
+    categoryTop: { type: String, default: '' }, // e.g., 'Docs' | 'Links'
+    categorySub: { type: String, default: '' }, // e.g., 'pdf' or 'twitter'
     tags: { type: [String], default: [] },
     embedding: { type: [Number], default: [] }, // Vector embedding for semantic search
     createdAt: { type: Date, default: Date.now },
