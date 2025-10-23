@@ -9,69 +9,149 @@ const { generateEmbedding, calculateCosineSimilarity } = require('../utils/embed
  */
 exports.semanticSearch = async (req, res, next) => {
   try {
-    const { query } = req.body;
-    
-    // Validate query
-    if (!query || typeof query !== 'string' || query.trim().length === 0) {
-      return res.status(400).json({ 
-        message: 'Query is required and must be a non-empty string' 
-      });
+    const { query, section } = req.body;
+    const userId = req.user.id;
+
+    // Base filter for user's items
+    const baseFilter = { userId };
+    if (section && section !== 'All Items') {
+      baseFilter.type = section.toLowerCase();
     }
-    
-    const trimmedQuery = query.trim();
-    
-    // Generate embedding for the search query
-    const queryEmbedding = await generateEmbedding(trimmedQuery);
-    
-    // Fetch all items for the logged-in user
-    const userItems = await Item.find({ 
-      userId: req.user.id,
-      embedding: { $exists: true, $ne: [] } // Only items with embeddings
-    });
-    
-    if (userItems.length === 0) {
+
+    // If no query, return all items for the section
+    if (!query || !query.trim()) {
+      const items = await Item.find(baseFilter).sort({ createdAt: -1 });
       return res.json({
-        query: trimmedQuery,
-        results: [],
-        totalResults: 0,
-        message: 'No items with embeddings found for semantic search'
+        results: items,
+        totalResults: items.length,
+        query: '',
+        section
       });
     }
-    
-    // Calculate cosine similarity between query and each item
-    const itemsWithSimilarity = userItems.map(item => {
-      const cosine = calculateCosineSimilarity(queryEmbedding, item.embedding);
-      // Normalize cosine (-1..1) to 0..1 for easier interpretation
-      const normalized = (cosine + 1) / 2;
-      return {
-        ...item.toObject(),
-        similarity: normalized
-      };
-    });
-    
-    // Sort by similarity (highest first) and return up to top 20
-    const topResults = itemsWithSimilarity
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, 20)
+
+    // Search setup
+    const searchQuery = query.trim();
+    const searchQueryLower = searchQuery.toLowerCase();
+    const items = await Item.find(baseFilter);
+
+    // Initialize results array
+    let searchResults = [];
+
+    // 1. First Priority: Exact title matches (case-insensitive)
+    const exactTitleMatches = items.filter(item => {
+      const title = String(item.title || '');
+      return title.toLowerCase() === searchQueryLower;
+    }).map(item => ({
+      ...item.toObject(),
+      score: 1.0,
+      matchType: 'exact-title'
+    }));
+    searchResults.push(...exactTitleMatches);
+
+    // 2. Second Priority: Exact tag matches (case-insensitive)
+    const exactTagMatches = items.filter(item => {
+      if (searchResults.find(r => r._id.toString() === item._id.toString())) return false;
+      const tags = Array.isArray(item.tags) ? item.tags : [];
+      return tags.some(tag => String(tag).toLowerCase() === searchQueryLower);
+    }).map(item => ({
+      ...item.toObject(),
+      score: 0.9,
+      matchType: 'exact-tag'
+    }));
+    searchResults.push(...exactTagMatches);
+
+    // 3. Third Priority: Partial title matches
+    const partialTitleMatches = items.filter(item => {
+      if (searchResults.find(r => r._id.toString() === item._id.toString())) return false;
+      const title = String(item.title || '');
+      return title.toLowerCase().includes(searchQueryLower);
+    }).map(item => ({
+      ...item.toObject(),
+      score: 0.8,
+      matchType: 'partial-title'
+    }));
+    searchResults.push(...partialTitleMatches);
+
+    // 4. Fourth Priority: Partial tag matches
+    const partialTagMatches = items.filter(item => {
+      if (searchResults.find(r => r._id.toString() === item._id.toString())) return false;
+      const tags = Array.isArray(item.tags) ? item.tags : [];
+      return tags.some(tag => String(tag).toLowerCase().includes(searchQueryLower));
+    }).map(item => ({
+      ...item.toObject(),
+      score: 0.7,
+      matchType: 'partial-tag'
+    }));
+    searchResults.push(...partialTagMatches);
+
+    // 5. Fifth Priority: Content matches
+    const contentMatches = items.filter(item => {
+      if (searchResults.find(r => r._id.toString() === item._id.toString())) return false;
+      const content = String(item.content || '');
+      const url = String(item.url || '');
+      return content.toLowerCase().includes(searchQueryLower) ||
+             url.toLowerCase().includes(searchQueryLower);
+    }).map(item => ({
+      ...item.toObject(),
+      score: 0.6,
+      matchType: 'content'
+    }));
+    searchResults.push(...contentMatches);
+
+    // 6. Last Resort: Semantic search (only if no other matches found)
+    if (searchResults.length === 0) {
+      try {
+        const queryEmbedding = await generateEmbedding(searchQuery);
+        const semanticMatches = items
+          .filter(item => Array.isArray(item.embedding) && item.embedding.length > 0)
+          .map(item => {
+            try {
+              const similarity = calculateCosineSimilarity(queryEmbedding, item.embedding);
+              return {
+                ...item.toObject(),
+                score: similarity * 0.5, // Scale down semantic scores
+                matchType: 'semantic'
+              };
+            } catch (error) {
+              console.error('Error calculating similarity:', error);
+              return null;
+            }
+          })
+          .filter(Boolean) // Remove null results
+          .filter(item => item.score > 0.15); // Only keep somewhat relevant matches
+
+        searchResults.push(...semanticMatches);
+      } catch (error) {
+        console.error('Semantic search error:', error);
+        // Continue without semantic results
+      }
+    }
+
+    // Sort results by score and prepare final response
+    const finalResults = searchResults
+      .sort((a, b) => b.score - a.score)
       .map(item => {
-        // Remove embedding from response to reduce payload size
-        const { embedding, ...itemWithoutEmbedding } = item;
+        // Remove internal fields from response
+        const { embedding, matchType, score, ...cleanItem } = item;
         return {
-          ...itemWithoutEmbedding,
-          similarity: item.similarity
+          ...cleanItem,
+          similarity: score // Rename score to similarity for frontend compatibility
         };
       });
-    
+
     return res.json({
-      query: trimmedQuery,
-      results: topResults,
-      totalResults: topResults.length,
-      totalItemsSearched: userItems.length
+      results: finalResults,
+      totalResults: finalResults.length,
+      query: searchQuery,
+      section,
+      searchType: finalResults.length > 0 ? 
+        (searchResults[0].matchType === 'semantic' ? 'semantic' : 'text') : 
+        'none'
     });
-    
+
   } catch (error) {
-    console.error('Semantic search error:', error);
-    return next(error);
+    console.error('Search error:', error);
+    next(error);
   }
 };
 
@@ -98,4 +178,4 @@ exports.reindexEmbeddings = async (req, res, next) => {
   } catch (error) {
     return next(error);
   }
-}
+};

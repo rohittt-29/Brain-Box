@@ -54,10 +54,12 @@ async function generateEmbedding(text) {
         if (Array.isArray(vector) && vector.length > 0) {
           return normalizeVector(vector.map((n) => Number(n) || 0));
         }
-        console.error('OpenAI embedding error: invalid vector');
+        console.error('OpenAI embedding error: invalid vector format received', json);
+        throw new Error('Invalid embedding format received from OpenAI');
       } else {
         const errBody = await res.text();
         console.error('OpenAI embedding error:', res.status, errBody);
+        throw new Error(`OpenAI API error: ${res.status} - ${errBody}`);
       }
       // Fallback if OpenAI failed (quota, network, etc.)
       return deterministicFallbackEmbedding(trimmed);
