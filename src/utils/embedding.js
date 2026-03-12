@@ -61,8 +61,6 @@ async function generateEmbedding(text) {
         console.error('OpenAI embedding error:', res.status, errBody);
         throw new Error(`OpenAI API error: ${res.status} - ${errBody}`);
       }
-      // Fallback if OpenAI failed (quota, network, etc.)
-      return deterministicFallbackEmbedding(trimmed);
     }
 
     // Fallback: deterministic pseudo-embedding from text (still not semantic, but stable)

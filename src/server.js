@@ -39,26 +39,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-// Manual preflight handler compatible with Express 5 routing
-app.use((req, res, next) => {
-  if (req.method === 'OPTIONS') {
-    const origin = req.headers.origin;
-    const incoming = normalizeOrigin(origin);
-    if (!origin || allowedOrigins.includes(incoming)) {
-      if (origin) {
-        res.header('Access-Control-Allow-Origin', origin);
-        res.header('Vary', 'Origin');
-      } else {
-        res.header('Access-Control-Allow-Origin', '*');
-      }
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-      return res.sendStatus(204);
-    }
-  }
-  next();
-});
+
 
 const authRoutes = require('./routes/authRoutes');
 const itemRoutes = require('./routes/itemRoutes');

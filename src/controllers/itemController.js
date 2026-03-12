@@ -28,8 +28,6 @@ function computeCategoriesForItem({ type, url, fileUrl, title }) {
 
 exports.createItem = async (req, res, next) => {
   try {
-    console.log('req.file:', req.file);
-    console.log('req.body:', req.body);
     
     const payload = {
       ...req.body,
@@ -46,7 +44,7 @@ exports.createItem = async (req, res, next) => {
       payload.fileUrl = result.secure_url
     }
 
-    console.log('Final payload:', payload);
+
 
     // Build semantic text from content, title, url and tags so tags influence search
     const tagText = Array.isArray(payload.tags) ? payload.tags.join(' ') : ''

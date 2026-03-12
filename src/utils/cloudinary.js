@@ -23,7 +23,7 @@ function uploadBuffer(buffer, options = {}) {
       resource_type: 'auto',     // PDFs, docs etc.
       use_filename: true,
       unique_filename: true,
-      access_mode: 'public',    // 👈 yeh add kiya
+      access_mode: 'public',
     };
 
     if (options.originalFilename) {

@@ -7,7 +7,8 @@ module.exports = function authenticate(req, res, next) {
 	if (!token) return res.status(401).json({ message: 'Authorization token missing' });
 
 	try {
-		const secret = process.env.JWT_SECRET || 'dev_secret_change_me';
+		const secret = process.env.JWT_SECRET;
+		if (!secret) return res.status(500).json({ message: 'Server misconfigured: JWT_SECRET not set' });
 		const decoded = jwt.verify(token, secret);
 		req.user = { id: decoded.id };
 		return next();
