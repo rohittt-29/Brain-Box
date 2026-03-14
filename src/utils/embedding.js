@@ -36,8 +36,10 @@ async function generateEmbedding(text) {
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (apiKey) {
-      // Use native fetch (Node 18+) to avoid extra deps
-      const res = await fetch('https://api.openai.com/v1/embeddings', {
+      // Use OPENAI_API_BASE if set (e.g. for OpenRouter), otherwise default to OpenAI
+      const apiBase = (process.env.OPENAI_API_BASE || 'https://api.openai.com/v1').replace(/\/+$/, '');
+      const embeddingUrl = `${apiBase}/embeddings`;
+      const res = await fetch(embeddingUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
