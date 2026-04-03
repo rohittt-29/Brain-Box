@@ -1,112 +1,81 @@
 /**
- * Embedding utility (production-ready): uses OpenAI embeddings if OPENAI_API_KEY is set,
- * otherwise falls back to a deterministic placeholder.
+ * Embedding utility: 100% LOCAL embeddings using @xenova/transformers.
+ * Model: Xenova/all-MiniLM-L6-v2  →  384 dimensions, no API key required.
+ * The model (~90 MB) is downloaded from HuggingFace on first use and cached locally.
  */
 
-/**
- * Normalize a vector to unit length for cosine similarity.
- */
-function normalizeVector(vec) {
-  const magnitude = Math.sqrt(vec.reduce((sum, val) => sum + val * val, 0)) || 1;
-  return vec.map((v) => v / magnitude);
+// Lazily-initialized pipeline — avoids re-loading the model on every call
+let _pipeline = null;
+
+async function getEmbeddingPipeline() {
+  if (!_pipeline) {
+    // @xenova/transformers is ESM-only; use dynamic import in CommonJS
+    const { pipeline, env } = await import('@xenova/transformers');
+
+    // Suppress verbose progress logs in production
+    env.allowLocalModels = false;
+
+    console.log('[Embedding] Loading Xenova/all-MiniLM-L6-v2 (first load — downloads ~90MB) ...');
+    _pipeline = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    console.log('[Embedding] Model ready.');
+  }
+  return _pipeline;
 }
 
+/**
+ * Deterministic fallback when model is still loading or an error occurs.
+ * Produces a 384-dim pseudo-vector (not semantic, but stable for a given text).
+ */
 function deterministicFallbackEmbedding(text) {
   const trimmed = String(text || '').trim();
-  if (!trimmed) return [];
-  const dim = 384;
-  const arr = new Array(dim).fill(0);
+  if (!trimmed) return new Array(384).fill(0);
+  const arr = new Array(384).fill(0);
   for (let i = 0; i < trimmed.length; i++) {
     const code = trimmed.charCodeAt(i);
-    arr[i % dim] += (code % 97) / 50 - 1; // spread chars across dims
+    arr[i % 384] += (code % 97) / 50 - 1;
   }
-  return normalizeVector(arr);
+  const mag = Math.sqrt(arr.reduce((s, v) => s + v * v, 0)) || 1;
+  return arr.map((v) => v / mag);
 }
 
 /**
- * Generates a vector embedding for the given text.
- * Prefers OpenAI `text-embedding-3-small` if OPENAI_API_KEY is available.
+ * Generates a 384-dimensional embedding vector for the given text.
+ * Uses the local Xenova/all-MiniLM-L6-v2 model — no API key required.
  * @param {string} text
- * @returns {Promise<number[]>}
+ * @returns {Promise<number[]>}  Always resolves (falls back on error).
  */
 async function generateEmbedding(text) {
   try {
     const trimmed = String(text || '').trim();
-    if (!trimmed) return [];
+    if (!trimmed) return new Array(384).fill(0);
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (apiKey) {
-      // Use OPENAI_API_BASE if set (e.g. for OpenRouter), otherwise default to OpenAI
-      const apiBase = (process.env.OPENAI_API_BASE || 'https://api.openai.com/v1').replace(/\/+$/, '');
-      const embeddingUrl = `${apiBase}/embeddings`;
-      const res = await fetch(embeddingUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'text-embedding-3-small',
-          input: trimmed,
-        }),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        const vector = json?.data?.[0]?.embedding;
-        if (Array.isArray(vector) && vector.length > 0) {
-          return normalizeVector(vector.map((n) => Number(n) || 0));
-        }
-        console.error('OpenAI embedding error: invalid vector format received', json);
-        throw new Error('Invalid embedding format received from OpenAI');
-      } else {
-        const errBody = await res.text();
-        console.error('OpenAI embedding error:', res.status, errBody);
-        throw new Error(`OpenAI API error: ${res.status} - ${errBody}`);
-      }
-    }
-
-    // Fallback: deterministic pseudo-embedding from text (still not semantic, but stable)
-    // This is just to avoid total failure when API key is missing.
-    return deterministicFallbackEmbedding(trimmed);
-  } catch (error) {
-    console.error('Error generating embedding:', error);
-    // Final safety fallback: never throw, always return a deterministic vector
+    const pipe = await getEmbeddingPipeline();
+    // pooling='mean' + normalize=true → unit-length 384-dim vector
+    const output = await pipe(trimmed, { pooling: 'mean', normalize: true });
+    return Array.from(output.data);
+  } catch (err) {
+    console.error('[Embedding] Error generating embedding, using fallback:', err.message);
     return deterministicFallbackEmbedding(text);
   }
 }
 
 /**
- * Calculates cosine similarity between two embedding vectors
- * @param {number[]} embedding1 - First embedding vector
- * @param {number[]} embedding2 - Second embedding vector
- * @returns {number} - Cosine similarity score between -1 and 1
+ * Cosine similarity between two equal-length embedding vectors.
+ * @param {number[]} a
+ * @param {number[]} b
+ * @returns {number} Score between -1 and 1.
  */
-function calculateCosineSimilarity(embedding1, embedding2) {
-  if (embedding1.length !== embedding2.length) {
-    throw new Error('Embedding vectors must have the same length');
+function calculateCosineSimilarity(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0, magA = 0, magB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    magA += a[i] * a[i];
+    magB += b[i] * b[i];
   }
-  
-  let dotProduct = 0;
-  let magnitude1 = 0;
-  let magnitude2 = 0;
-  
-  for (let i = 0; i < embedding1.length; i++) {
-    dotProduct += embedding1[i] * embedding2[i];
-    magnitude1 += embedding1[i] * embedding1[i];
-    magnitude2 += embedding2[i] * embedding2[i];
-  }
-  
-  magnitude1 = Math.sqrt(magnitude1);
-  magnitude2 = Math.sqrt(magnitude2);
-  
-  if (magnitude1 === 0 || magnitude2 === 0) {
-    return 0;
-  }
-  
-  return dotProduct / (magnitude1 * magnitude2);
+  magA = Math.sqrt(magA);
+  magB = Math.sqrt(magB);
+  return magA && magB ? dot / (magA * magB) : 0;
 }
 
-module.exports = {
-  generateEmbedding,
-  calculateCosineSimilarity
-};
+module.exports = { generateEmbedding, calculateCosineSimilarity };

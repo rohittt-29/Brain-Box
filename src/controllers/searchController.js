@@ -165,9 +165,7 @@ exports.reindexEmbeddings = async (req, res, next) => {
     let updatedCount = 0;
     for (const item of items) {
       const tagText = Array.isArray(item.tags) ? item.tags.join(' ') : ''
-      const textForEmbedding = (item.content && item.content.trim().length > 0)
-        ? item.content
-        : `${item.title || ''} ${item.url || ''} ${tagText}`.trim();
+      const textForEmbedding = `${item.title || ''} ${item.content || ''} ${item.url || ''} ${tagText}`.trim();
       if (!textForEmbedding) continue;
       const embedding = await generateEmbedding(textForEmbedding);
       item.embedding = embedding;

@@ -44,10 +44,12 @@ app.use(cors(corsOptions));
 const authRoutes = require('./routes/authRoutes');
 const itemRoutes = require('./routes/itemRoutes');
 const searchRoutes = require('./routes/searchRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/items', itemRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/uploads', express.static('uploads'));
 
 app.get('/', (req, res) => {
@@ -56,7 +58,8 @@ app.get('/', (req, res) => {
 		health: '/health',
 		auth: ['/api/auth/signup', '/api/auth/login'],
 		items: ['/api/items (GET, POST)', '/api/items/:id (GET, PUT, DELETE)'],
-		search: ['/api/search (POST) - Semantic search with embeddings']
+		search: ['/api/search (POST) - Semantic search with embeddings'],
+		chat: ['/api/chat/ask (POST) - AI assistant with RAG']
 	});
 });
 

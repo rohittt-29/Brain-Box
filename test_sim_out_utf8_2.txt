@@ -1,0 +1,16 @@
+﻿[dotenv@17.2.2] injecting env (7) from .env -- tip: ≡ƒôí observe env with Radar: https://dotenvx.com/radar
+Connected to MongoDB
+[Embedding] Loading Xenova/all-MiniLM-L6-v2 (first load ΓÇö downloads ~90MB) ...
+[Embedding] Model ready.
+Cosine similarity between user query and item: 0.31709201767506323
+Item title: cold email temlate
+Item content: Hi Team Avendus,
+
+I hope this message finds you well. My name is Rohit, and IΓÇÖm currently explorin
+
+Top 5 vector search results from Atlas:
+1. Cold email template (Score: 0.7585371732711792)
+2. cold email temlate (Score: 0.658545970916748)
+3. redit meme (Score: 0.6541730165481567)
+4. Api practices (Score: 0.6128962635993958)
+5. resume tipssss (Score: 0.6128169894218445)

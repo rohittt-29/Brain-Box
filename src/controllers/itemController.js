@@ -47,10 +47,8 @@ exports.createItem = async (req, res, next) => {
 
 
     // Build semantic text from content, title, url and tags so tags influence search
-    const tagText = Array.isArray(payload.tags) ? payload.tags.join(' ') : ''
-    const textForEmbedding = (payload.content && payload.content.trim().length > 0)
-      ? payload.content
-      : `${payload.title || ''} ${payload.url || ''} ${tagText}`.trim();
+    const tagText = Array.isArray(payload.tags) ? payload.tags.join(' ') : '';
+    const textForEmbedding = `${payload.title || ''} ${payload.content || ''} ${payload.url || ''} ${tagText}`.trim();
     if (textForEmbedding) {
       payload.embedding = await generateEmbedding(textForEmbedding);
     }
@@ -135,10 +133,8 @@ exports.updateItem = async (req, res, next) => {
       url: updateData.url !== undefined ? updateData.url : existing.url,
       tags: Array.isArray(updateData.tags) ? updateData.tags : (existing.tags || [])
     }
-    const tagText = Array.isArray(merged.tags) ? merged.tags.join(' ') : ''
-    const textForEmbedding = (merged.content && merged.content.trim().length > 0)
-      ? merged.content
-      : `${merged.title || ''} ${merged.url || ''} ${tagText}`.trim();
+    const tagText = Array.isArray(merged.tags) ? merged.tags.join(' ') : '';
+    const textForEmbedding = `${merged.title || ''} ${merged.content || ''} ${merged.url || ''} ${tagText}`.trim();
     if (textForEmbedding) {
       updateData.embedding = await generateEmbedding(textForEmbedding);
     }

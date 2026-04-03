@@ -1,0 +1,16 @@
+﻿[dotenv@17.2.2] injecting env (7) from .env -- tip: ≡ƒöÉ prevent committing .env to code: https://dotenvx.com/precommit
+Connected to MongoDB
+[Embedding] Loading Xenova/all-MiniLM-L6-v2 (first load ΓÇö downloads ~90MB) ...
+[Embedding] Model ready.
+Cosine similarity between user query and item: -0.011997427979960314
+Item title: cold email temlate
+Item content: Hi Team Avendus,
+
+I hope this message finds you well. My name is Rohit, and IΓÇÖm currently explorin
+
+Top 5 vector search results from Atlas:
+1. Interview projects tips (Score: 0.5342819690704346)
+2. Ai + full stack (Score: 0.5319044589996338)
+3. All important development sheets (Score: 0.5299537181854248)
+4. ai roadmap video (Score: 0.5274864435195923)
+5. togetha backend (Score: 0.5191465616226196)
