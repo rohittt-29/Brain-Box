@@ -2,6 +2,7 @@ const Item = require('../models/Item');
 const { generateEmbedding } = require('../utils/embedding');
 const { uploadBuffer } = require('../utils/cloudinary');
 const { URL } = require('url')
+const { extractContentFromItem } = require('../utils/contentParser');
 
 function computeCategoriesForItem({ type, url, fileUrl, title }) {
   try {
@@ -45,6 +46,17 @@ exports.createItem = async (req, res, next) => {
     }
 
 
+
+    // --- AUTOMATIC CONTENT PARSING ---
+    let parsedContent = '';
+    const fileBuffer = (req.file && req.file.buffer) ? req.file.buffer : null;
+    parsedContent = await extractContentFromItem(payload.type, payload.url, fileBuffer);
+    
+    // Merge parsed content with user's inputted content
+    if (parsedContent) {
+      payload.content = payload.content ? `${payload.content}\n\n[Extracted Data]: ${parsedContent}` : parsedContent;
+    }
+    // ---------------------------------
 
     // Build semantic text from content, title, url and tags so tags influence search
     const tagText = Array.isArray(payload.tags) ? payload.tags.join(' ') : '';
@@ -126,6 +138,21 @@ exports.updateItem = async (req, res, next) => {
       }
     }
     
+    // --- AUTOMATIC CONTENT PARSING (Update) ---
+    // Only attempt to parse if the user provided a new file buffer or a newly added URL, or if we want to force parse.
+    // To be safe, if there's a new file buffer or the URL changed, let's extract.
+    let parsedContentUpdate = '';
+    const updateFileBuffer = (req.file && req.file.buffer) ? req.file.buffer : null;
+    const urlChanged = updateData.url && updateData.url !== existing.url;
+    
+    if (updateFileBuffer || urlChanged) {
+      parsedContentUpdate = await extractContentFromItem(existing.type, updateData.url || existing.url, updateFileBuffer);
+      if (parsedContentUpdate) {
+         updateData.content = updateData.content ? `${updateData.content}\n\n[Extracted Data]: ${parsedContentUpdate}` : parsedContentUpdate;
+      }
+    }
+    // ------------------------------------------
+
     // Recompute embedding from merged data (so unchanged fields are included)
     const merged = {
       title: updateData.title !== undefined ? updateData.title : existing.title,

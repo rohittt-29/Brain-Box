@@ -207,7 +207,7 @@ URL: ${item.url || 'N/A'}`;
   // ── D: Prompt ────────────────────────────────────────────────────────────
   // ── D: Prompt ────────────────────────────────────────────────────────────
   const systemPrompt = context
-    ? `You are BrainBox AI.
+    ? `You are Insight Cart AI.
 
 You MUST answer using the user's saved notes provided below.
 
