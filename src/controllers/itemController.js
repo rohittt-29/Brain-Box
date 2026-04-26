@@ -45,17 +45,29 @@ exports.createItem = async (req, res, next) => {
       payload.fileUrl = result.secure_url
     }
 
-
-
     // --- AUTOMATIC CONTENT PARSING ---
     let parsedContent = '';
-    const fileBuffer = (req.file && req.file.buffer) ? req.file.buffer : null;
-    parsedContent = await extractContentFromItem(payload.type, payload.url, fileBuffer);
-    
+
+    if (payload.type === 'document') {
+      // PDF text extracted in the browser (pdfjs-dist) and sent as pdfContent field.
+      // This avoids memory / payload-size issues on the server.
+      parsedContent = String(req.body.pdfContent || '').trim();
+      if (parsedContent) {
+        console.log(`[ItemController] Using browser-extracted PDF text (${parsedContent.length} chars)`);
+      }
+    } else {
+      // For links and videos, extract metadata server-side (multi-strategy, bot-resistant)
+      parsedContent = await extractContentFromItem(payload.type, payload.url);
+    }
+
     // Merge parsed content with user's inputted content
     if (parsedContent) {
-      payload.content = payload.content ? `${payload.content}\n\n[Extracted Data]: ${parsedContent}` : parsedContent;
+      payload.content = payload.content
+        ? `${payload.content}\n\n[Extracted Data]: ${parsedContent}`
+        : parsedContent;
     }
+    // Remove pdfContent from payload — it's a helper field, not a model field
+    delete payload.pdfContent;
     // ---------------------------------
 
     // Build semantic text from content, title, url and tags so tags influence search
@@ -139,18 +151,26 @@ exports.updateItem = async (req, res, next) => {
     }
     
     // --- AUTOMATIC CONTENT PARSING (Update) ---
-    // Only attempt to parse if the user provided a new file buffer or a newly added URL, or if we want to force parse.
-    // To be safe, if there's a new file buffer or the URL changed, let's extract.
     let parsedContentUpdate = '';
     const updateFileBuffer = (req.file && req.file.buffer) ? req.file.buffer : null;
     const urlChanged = updateData.url && updateData.url !== existing.url;
-    
-    if (updateFileBuffer || urlChanged) {
-      parsedContentUpdate = await extractContentFromItem(existing.type, updateData.url || existing.url, updateFileBuffer);
+
+    if (existing.type === 'document' && updateFileBuffer) {
+      // Use browser-extracted text if provided
+      parsedContentUpdate = String(req.body.pdfContent || '').trim();
       if (parsedContentUpdate) {
-         updateData.content = updateData.content ? `${updateData.content}\n\n[Extracted Data]: ${parsedContentUpdate}` : parsedContentUpdate;
+        console.log(`[ItemController] Update: using browser-extracted PDF text (${parsedContentUpdate.length} chars)`);
       }
+    } else if (urlChanged) {
+      parsedContentUpdate = await extractContentFromItem(existing.type, updateData.url || existing.url);
     }
+
+    if (parsedContentUpdate) {
+      updateData.content = updateData.content
+        ? `${updateData.content}\n\n[Extracted Data]: ${parsedContentUpdate}`
+        : parsedContentUpdate;
+    }
+    delete updateData.pdfContent;
     // ------------------------------------------
 
     // Recompute embedding from merged data (so unchanged fields are included)

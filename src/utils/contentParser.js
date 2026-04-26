@@ -1,125 +1,153 @@
 // src/utils/contentParser.js
-const pdfParse = require('pdf-parse'); // v1.1.1 — exports directly as a function
-const cheerio = require('cheerio');
+//
+// Strategy:
+// ─ PDF:   text is extracted in the BROWSER (pdfExtractor.js) and sent as
+//          the `pdfContent` FormData field. The server never touches pdf-parse.
+//          This field is handled directly in itemController.js.
+//
+// ─ Links: Use a multi-layer approach that works even from datacenter IPs:
+//          1. jsonlink.io  – free public OG/meta API, no key required
+//          2. OpenGraph.io – free public meta API, no key required
+//          3. Direct lightweight HEAD-only title scrape with strict user-agent
+//          4. Silent fail → empty string (item still saved without parsed content)
+//
 const axios = require('axios');
+const cheerio = require('cheerio');
 
-// Limit the extracted content to 2500 characters to map successfully into our local embeddings
 const MAX_LENGTH = 2500;
 
-async function parsePDF(buffer) {
+// ── Strategy 1: jsonlink.io (free, no key) ───────────────────────────────────
+async function tryJsonLink(url) {
   try {
-    if (!pdfParse) {
-      console.warn('[ContentParser] pdf-parse not available (export issue), skipping PDF extraction');
-      return '';
-    }
-    const data = await pdfParse(buffer);
-    if (data && data.text) {
-      return data.text.substring(0, MAX_LENGTH).replace(/\n/g, ' ').trim();
-    }
-    return '';
-  } catch (error) {
-    console.error('Error parsing PDF:', error.message);
-    return '';
-  }
-}
-
-// Scrapes YouTube page HTML to extract video description and title from meta tags
-// No API key needed — uses public YouTube page metadata
-async function parseYoutube(url) {
-  try {
-    // 1. Get video title + description from YouTube's free oEmbed API
-    const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-    let oEmbedTitle = '';
-    try {
-      const oEmbedRes = await axios.get(oEmbedUrl, { timeout: 5000 });
-      oEmbedTitle = oEmbedRes.data?.title || '';
-    } catch (_) {}
-
-    // 2. Scrape the YouTube page HTML for the meta description
-    const pageRes = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
-      },
-      timeout: 8000
-    });
-
-    const $ = cheerio.load(pageRes.data);
-
-    // Extract meta description tag — YouTube puts the video description here
-    const metaDesc =
-      $('meta[name="description"]').attr('content') ||
-      $('meta[property="og:description"]').attr('content') ||
-      '';
-
-    // Combine title + description into one rich content string
-    const combined = [oEmbedTitle, metaDesc].filter(Boolean).join('. ');
-    if (combined) {
-      console.log('[ContentParser] YouTube metadata scraped successfully');
-      return combined.substring(0, MAX_LENGTH).trim();
-    }
-    return '';
-  } catch (error) {
-    console.error('Error scraping YouTube page:', error.message);
-    return '';
-  }
-}
-
-async function parseWebpage(url) {
-  try {
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      },
-      timeout: 6000 // 6 seconds timeout
-    });
-    
-    const html = response.data;
-    const $ = cheerio.load(html);
-    
-    // Remove unwanted elements
-    $('script, style, noscript, nav, footer, header').remove();
-    
-    // Extract text from paragraphs and headings mainly
-    let content = '';
-    $('p, h1, h2, h3, h4, h5, h6, article, section').each((i, el) => {
-      let text = $(el).text().trim();
-      if (text) {
-        content += text + ' ';
-      }
-    });
-
-    // Clean up excessive whitespace
-    content = content.replace(/\s+/g, ' ').trim();
-    return content.substring(0, MAX_LENGTH);
-  } catch (error) {
-    console.error('Error parsing Webpage:', error.message);
-    return '';
-  }
-}
-
-// Main delegator function
-async function extractContentFromItem(type, url, fileBuffer) {
-  let extractedContent = '';
-  try {
-    if (type === 'document' && fileBuffer) {
-      extractedContent = await parsePDF(fileBuffer);
-      console.log(`[ContentParser] Extracted ${extractedContent.length} chars from PDF`);
-    } else if ((type === 'video' || type === 'link') && url) {
-      if (url.includes('youtube.com') || url.includes('youtu.be')) {
-        extractedContent = await parseYoutube(url);
-        console.log(`[ContentParser] Extracted ${extractedContent.length} chars from YouTube`);
-      } else {
-        extractedContent = await parseWebpage(url);
-        console.log(`[ContentParser] Extracted ${extractedContent.length} chars from Web HTML`);
-      }
+    const endpoint = `https://jsonlink.io/api/extract?url=${encodeURIComponent(url)}`;
+    const res = await axios.get(endpoint, { timeout: 7000 });
+    const d = res.data;
+    const parts = [d?.title, d?.description, (d?.images || []).join(' ')].filter(Boolean);
+    const text = parts.join('. ');
+    if (text.length > 20) {
+      console.log('[ContentParser] jsonlink.io success');
+      return text.substring(0, MAX_LENGTH);
     }
   } catch (e) {
-    console.warn(`[ContentParser] Failed to extract from ${type}: ${e.message}`);
+    console.warn('[ContentParser] jsonlink.io failed:', e.message);
   }
-  return extractedContent;
+  return '';
 }
 
-module.exports = {
-  extractContentFromItem
-};
+// ── Strategy 2: opengraph.io (free endpoint, no auth for basic) ──────────────
+async function tryOpenGraph(url) {
+  try {
+    const endpoint = `https://opengraph.io/api/1.1/site/${encodeURIComponent(url)}?accept_lang=auto`;
+    const res = await axios.get(endpoint, { timeout: 7000 });
+    const og = res.data?.openGraph || res.data?.hybridGraph || {};
+    const parts = [og.title, og.description, og.site_name].filter(Boolean);
+    const text = parts.join('. ');
+    if (text.length > 20) {
+      console.log('[ContentParser] opengraph.io success');
+      return text.substring(0, MAX_LENGTH);
+    }
+  } catch (e) {
+    console.warn('[ContentParser] opengraph.io failed:', e.message);
+  }
+  return '';
+}
+
+// ── Strategy 3: lightweight direct fetch (title + meta only) ─────────────────
+// Only grabs the <head> section by requesting with Range header or parsing HTML
+// Uses a browser-like User-Agent to reduce bot detection
+async function tryDirectMeta(url) {
+  try {
+    const res = await axios.get(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Accept': 'text/html',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      timeout: 8000,
+      maxContentLength: 200 * 1024, // Only read first 200KB — enough for <head>
+      responseType: 'text',
+    });
+
+    const html = typeof res.data === 'string' ? res.data : '';
+    // Only parse the <head> portion for speed
+    const headMatch = html.match(/<head[\s\S]*?<\/head>/i);
+    const fragment = headMatch ? headMatch[0] : html.substring(0, 5000);
+    const $ = cheerio.load(fragment);
+
+    const title =
+      $('meta[property="og:title"]').attr('content') ||
+      $('meta[name="twitter:title"]').attr('content') ||
+      $('title').text() ||
+      '';
+
+    const desc =
+      $('meta[property="og:description"]').attr('content') ||
+      $('meta[name="description"]').attr('content') ||
+      $('meta[name="twitter:description"]').attr('content') ||
+      '';
+
+    const combined = [title, desc].filter(Boolean).join('. ').trim();
+    if (combined.length > 10) {
+      console.log('[ContentParser] directMeta success');
+      return combined.substring(0, MAX_LENGTH);
+    }
+  } catch (e) {
+    console.warn('[ContentParser] directMeta failed:', e.message);
+  }
+  return '';
+}
+
+// ── YouTube: use free oEmbed API (no scraping, no bot detection) ─────────────
+async function parseYoutube(url) {
+  try {
+    const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+    const res = await axios.get(oEmbedUrl, { timeout: 6000 });
+    const title = res.data?.title || '';
+    const author = res.data?.author_name || '';
+    const combined = [title, author ? `by ${author}` : ''].filter(Boolean).join(' ');
+    if (combined) {
+      console.log('[ContentParser] YouTube oEmbed success');
+      return combined.substring(0, MAX_LENGTH);
+    }
+  } catch (e) {
+    console.warn('[ContentParser] YouTube oEmbed failed:', e.message);
+  }
+  return '';
+}
+
+// ── Main multi-strategy link parser ──────────────────────────────────────────
+async function parseLink(url) {
+  // YouTube gets its own dedicated path (oEmbed is always public)
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    return parseYoutube(url);
+  }
+
+  // Try each strategy in order; return on first non-empty result
+  const strategies = [tryJsonLink, tryDirectMeta, tryOpenGraph];
+  for (const strategy of strategies) {
+    const result = await strategy(url);
+    if (result) return result;
+  }
+
+  console.warn('[ContentParser] All link strategies failed for:', url);
+  return '';
+}
+
+// ── Main delegator ────────────────────────────────────────────────────────────
+// NOTE: `pdfContent` (from browser extraction) is NOT handled here —
+// itemController.js reads req.body.pdfContent directly before calling this.
+async function extractContentFromItem(type, url) {
+  try {
+    if ((type === 'video' || type === 'link') && url) {
+      return await parseLink(url);
+    }
+    // 'document' type: content comes from pdfContent sent by the browser
+    // 'note' type: user types the content manually
+  } catch (e) {
+    console.warn(`[ContentParser] Failed for ${type}: ${e.message}`);
+  }
+  return '';
+}
+
+module.exports = { extractContentFromItem };
