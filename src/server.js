@@ -12,8 +12,7 @@ app.use(express.json());
 // In production, default to your Vercel domain only; in dev allow localhost
 const defaultOrigins = (process.env.NODE_ENV === 'production')
   ? [
-    "https://brain-box1.vercel.app",
-    "https://brain-ui-beta.vercel.app"
+    "https://insight-box1.vercel.app"
   ]
   : ["http://localhost:5173"];
 const normalizeOrigin = (o) => String(o || '').trim().toLowerCase().replace(/\/$/, '');
